@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DbMapper/DbMapper.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DbMapper.SelfTest/DbMapper.SelfTest.csproj" />
+  </Folder>
+</Solution>

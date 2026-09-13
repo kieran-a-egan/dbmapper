@@ -30,6 +30,8 @@ Have the project's existing CLAUDE.md import this file using its repository-rela
 
 Choose a database from the root index before selecting schemas. Database names are exported as structural identifiers; each database has its own directory. The same schema/table name can exist in multiple databases with different structure. Never merge their objects or infer cross-database relationships. Follow the selected database's own CLAUDE.md and links for its local context.
 
-Read server.md for scan coverage. A skipped/failed database has a status page and no current schema files. An incomplete scan is not evidence that its missing objects were dropped. System databases and snapshots are included if visible; their exported objects follow the same catalog filters as application databases.
+Read server.md for scan coverage. A skipped/failed database has a status page and no current schema files. An incomplete scan is not evidence that its missing objects were dropped. Full scans include visible system databases and snapshots; selected scans include only the requested names. Their exported objects follow the same catalog filters as application databases.
 
-<!-- dbmapper:sha256=e1549dcbfe60d9e74e232f85cdda8fd6bf307030a6ee9a08eb5782a5fc1116a2 -->
+After completing schema work, refresh the affected database with `dbmapper --update-database <exact-name> --output <bundle-directory>` from the application project, then review the generated diff before committing. Other databases retain their previous scan results; a targeted update does not verify their freshness.
+
+<!-- dbmapper:sha256=1e807d0698ceffd69a79c80ea4edfec5a5061618ef5795698832afda3c0ac35b -->

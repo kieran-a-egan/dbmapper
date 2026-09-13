@@ -4,7 +4,8 @@ namespace DbMapper;
 
 internal sealed class UsageException(string message) : Exception(message);
 
-internal sealed record Options(string? Project, string? SecretsId, string? SecretKey, string Output, int Timeout, bool AllDatabases)
+internal sealed record Options(string? Project, string? SecretsId, string? SecretKey, string Output, int Timeout, bool AllDatabases,
+    IReadOnlyList<string> Databases, string? UpdateDatabase)
 {
     public static Options Parse(string[] args)
     {
@@ -12,6 +13,8 @@ internal sealed record Options(string? Project, string? SecretsId, string? Secre
         var output = "database-context";
         var timeout = 30;
         var allDatabases = false;
+        var databases = new List<string>();
+        string? updateDatabase = null;
         var seen = new HashSet<string>(StringComparer.Ordinal);
         for (var i = 0; i < args.Length; i++)
         {
@@ -22,10 +25,10 @@ internal sealed record Options(string? Project, string? SecretsId, string? Secre
                 allDatabases = true;
                 continue;
             }
-            if (option is not ("--project" or "--user-secrets-id" or "--connection" or "--secret-key" or "--output" or "--timeout"))
+            if (option is not ("--project" or "--user-secrets-id" or "--connection" or "--secret-key" or "--output" or "--timeout" or "--database" or "--update-database"))
                 throw new UsageException("Unknown argument. Run dbmapper --help; connection strings are never accepted as arguments.");
-            if (!seen.Add(option) || ++i == args.Length || string.IsNullOrWhiteSpace(args[i]) || args[i].StartsWith("--", StringComparison.Ordinal))
-                throw new UsageException("Each option requires one non-empty value and may be supplied once.");
+            if ((!seen.Add(option) && option != "--database") || ++i == args.Length || string.IsNullOrWhiteSpace(args[i]) || args[i].StartsWith("--", StringComparison.Ordinal))
+                throw new UsageException("Each option requires one non-empty value. Only --database may be repeated.");
             var value = args[i];
             switch (option)
             {
@@ -34,6 +37,8 @@ internal sealed record Options(string? Project, string? SecretsId, string? Secre
                 case "--connection": key = "ConnectionStrings:" + value; break;
                 case "--secret-key": key = value; break;
                 case "--output": output = value; break;
+                case "--database": databases.Add(value); break;
+                case "--update-database": updateDatabase = value; break;
                 case "--timeout":
                     if (!int.TryParse(value, out timeout) || timeout is < 1 or > 300)
                         throw new UsageException("--timeout must be between 1 and 300 seconds.");
@@ -42,7 +47,11 @@ internal sealed record Options(string? Project, string? SecretsId, string? Secre
         }
         if (seen.Contains("--connection") && seen.Contains("--secret-key"))
             throw new UsageException("Choose --connection or --secret-key, not both.");
-        return new(project, id, key, Path.GetFullPath(output), timeout, allDatabases);
+        if ((allDatabases ? 1 : 0) + (databases.Count > 0 ? 1 : 0) + (updateDatabase is not null ? 1 : 0) > 1)
+            throw new UsageException("Choose --all-databases, one or more --database options, or --update-database.");
+        if (databases.Distinct(StringComparer.Ordinal).Count() != databases.Count)
+            throw new UsageException("Each selected database may be supplied once. Use exact database names, including case.");
+        return new(project, id, key, Path.GetFullPath(output), timeout, allDatabases, databases, updateDatabase);
     }
 }
 
@@ -57,6 +66,8 @@ internal static class Cli
           dbmapper --connection DefaultConnection
           dbmapper --project src/Web/Web.csproj --secret-key Database:ConnectionString
           dbmapper --connection DefaultConnection --all-databases
+          dbmapper --database Application --database Reporting --output server-context
+          dbmapper --update-database Application --output server-context
 
         --project <path>         .csproj or directory (default: current directory)
         --connection <name>      Select ConnectionStrings:<name> from user secrets
@@ -65,12 +76,17 @@ internal static class Cli
         --output <directory>    Bundle directory (default: ./database-context)
         --timeout <seconds>     Connect/query timeout, 1-300 (default: 30)
         --all-databases         Scan visible user/system databases; export database names
+        --database <name>       Scan only this database; repeat to select several
+        --update-database <name> Refresh one database in an existing server bundle
         --help                  Show help without reading secrets or connecting
         --version               Show version
 
         With no key option, exactly one ConnectionStrings entry must exist.
         By default only the database explicitly named in that secret is inspected.
-        --all-databases discovers via master, using the same server and credentials.
+        --all-databases / --database discover via master with the same credentials.
+        Database selections use exact names, including case, and replace the bundle.
+        --update-database preserves other databases; a failed update preserves everything.
+        Run it after schema work, then review the bundle diff before committing.
         Unscannable databases are reported in server.md; incomplete exports exit 4.
         Reads fixed system catalog queries; never reads table/view rows or definitions.
         Requires database VIEW DEFINITION permission. Review identifiers before commit.
@@ -93,15 +109,32 @@ internal static class Cli
             }
             var options = Options.Parse(args);
             using var bundle = new BundleWriter(options.Output);
-            var connectionString = ProjectSecrets.Read(options);
-            if (options.AllDatabases)
+            Dictionary<string, string>? existing = null;
+            if (options.UpdateDatabase is not null)
             {
-                var databases = await ServerReader.ReadAsync(connectionString, options.Timeout, cancellationToken);
-                var serverFiles = OkfBundle.RenderServer(databases);
+                existing = bundle.Read();
+                OkfBundle.RequireServerDatabase(existing, options.UpdateDatabase);
+            }
+            var connectionString = ProjectSecrets.Read(options);
+            if (options.UpdateDatabase is not null)
+            {
+                var schema = await CatalogReader.ReadAsync(connectionString, options.Timeout, cancellationToken, options.UpdateDatabase);
+                var updated = OkfBundle.UpdateServerDatabase(existing!, options.UpdateDatabase, schema);
+                cancellationToken.ThrowIfCancellationRequested();
+                bundle.Write(updated);
+                await output.WriteLineAsync("Updated one database in the existing server bundle. Other databases retain their previous scan results.");
+                await output.WriteLineAsync("Review the bundle diff and server.md coverage before committing. Database names are included.");
+                return 0;
+            }
+            if (options.AllDatabases || options.Databases.Count > 0)
+            {
+                var databases = await ServerReader.ReadAsync(connectionString, options.Timeout, cancellationToken,
+                    options.AllDatabases ? null : options.Databases);
+                var serverFiles = OkfBundle.RenderServer(databases, selectedOnly: !options.AllDatabases);
                 cancellationToken.ThrowIfCancellationRequested();
                 bundle.Write(serverFiles);
                 var exported = databases.Count(d => d.Schema is not null);
-                await output.WriteLineAsync($"Exported {exported} of {databases.Count} discovered databases to {serverFiles.Count} OKF v0.2 Markdown files.");
+                await output.WriteLineAsync($"Exported {exported} of {databases.Count} {(options.AllDatabases ? "discovered" : "selected")} databases to {serverFiles.Count} OKF v0.2 Markdown files.");
                 await output.WriteLineAsync("Start at index.md and CLAUDE.md. Database names are included; review identifiers before committing.");
                 if (exported != databases.Count)
                 {

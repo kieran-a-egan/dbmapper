@@ -68,6 +68,37 @@ Offline, inaccessible or failed databases receive a status page. A partially suc
 
 For Claude Code, import `@server-context/CLAUDE.md` from the project's `CLAUDE.md`. Names and relationships are scoped to each database; cross-database dependencies are not inferred. An [example server-wide bundle](examples/server-context/index.md) demonstrates two exported databases and an offline database's status page.
 
+## Select databases to scan
+
+```powershell
+dbmapper --database Application --database Reporting --connection DefaultConnection --output ./server-context
+```
+
+Repeat `--database <name>` for each database you want in the bundle, including when you want just one named database. Names must match exactly, including case; quote names containing spaces or shell punctuation. Each argument is one literal name, so a comma is part of the name, not a separator. Select system databases explicitly if you need them.
+
+Selection uses the same `master` discovery and permissions as `--all-databases`, but opens catalog connections only for the selected databases. An unknown or invisible selection fails before scanning and preserves the existing bundle. A selected database that is offline, inaccessible or missing metadata permissions gets a status page and exit code `4`. Unselected databases do not appear in the output or affect the exit code.
+
+This command creates or **replaces the entire bundle** with the selected scope. Use the same selections on subsequent full refreshes. Choose one mode: `--all-databases`, repeated `--database`, or `--update-database`.
+
+## Update one database after a piece of work
+
+After applying your schema changes or migrations to the database and completing a discrete piece of work, refresh that database's context before committing:
+
+```powershell
+dbmapper --update-database Application --connection DefaultConnection --output ./server-context
+# Continue only if dbmapper succeeded; inspect the generated changes before staging.
+git diff -- ./server-context
+git status --short -- ./server-context
+```
+
+`--update-database <name>` requires an existing server bundle created with `--all-databases` or `--database`, and the exact database name must already be listed in it. Existing version 0.2.0 server bundles are supported. The command connects directly to that database using the selected secret's server, authentication and TLS settings, without server discovery or `VIEW ANY DATABASE` permission. It still requires database `CONNECT` and `VIEW DEFINITION`.
+
+The update replaces that database's generated subtree, removes its stale object pages, and updates its status in the shared indexes and `server.md`. Other databases retain their previous files and scan outcomes; they are not rescanned. No connection strings, timestamps or extra state files are added. Identical metadata produces no content diff.
+
+A failed or cancelled targeted update preserves the entire previous bundle. Edited/foreign files, symbolic links and concurrent exports are refused through the usual bundle protections. Exit `0` means the chosen database was refreshed; other databases can still have incomplete or stale results, as shown in `server.md`. Review both the diff and newly created files before staging. The command only refreshes catalog documentation; it does not apply migrations, stage files or create a commit.
+
+For the default single-database bundle, rerun the original `dbmapper` command after work; it already refreshes only the database named in the secret. Use a full or selected scan when you want to add/remove databases from a server bundle.
+
 ## Output and Claude Code
 
 ```text
@@ -98,7 +129,7 @@ Or tell Claude Code to start with `database-context/index.md` and follow the rel
 
 * **Fixed catalog queries only.** The embedded, reviewable [Catalog.sql](src/DbMapper/Catalog.sql) selects only explicit fields from `sys` catalogs and checks metadata permission; [ServerReader.cs](src/DbMapper/ServerReader.cs) adds fixed server/database discovery queries. No dynamic SQL, user-table/view row reads, stored-code execution, DDL or DML. Session settings bound lock waits to five seconds and lower deadlock priority. No transactions are enlisted; pooling and connection retries are disabled. `ApplicationIntent=ReadOnly` is a routing hint, not a database-enforced read-only mode.
 * **Metadata login.** Use a dedicated login with `CONNECT` and database `VIEW DEFINITION`, with no application-data read/write or DDL permissions. A DBA can grant `VIEW DEFINITION TO [your_metadata_user]` in the selected database. The tool refuses exports without database-level metadata visibility. Object-level denials can still affect visibility; it does not claim a complete or transactionally consistent snapshot. Run during a quiet schema window.
-* **Exclude risky fields at the query boundary.** No rows, samples, row counts, statistics, current identity/sequence values, SQL definitions, expression text, default literals, comments, extended properties, users, server names or file paths. Database names are used/exported only for `--all-databases`. Defaults/computed/check/filter expressions can hold sensitive literals, so only their presence/state is exported. There is no unsafe include-definitions switch. SQL exceptions, configuration errors and raw arguments are never printed.
+* **Exclude risky fields at the query boundary.** No rows, samples, row counts, statistics, current identity/sequence values, SQL definitions, expression text, default literals, comments, extended properties, users, server names or file paths. Database names are used/exported only for server bundles (`--all-databases`, `--database`, `--update-database`). Defaults/computed/check/filter expressions can hold sensitive literals, so only their presence/state is exported. There is no unsafe include-definitions switch. SQL exceptions, configuration errors and raw arguments are never printed.
 * **Review identifiers.** Table/column/index/routine names and declared SQL types remain visible because they are essential development context. They can themselves be confidential. This is suitable for review and committing as schema documentation, not a guarantee that arbitrary names are safe to publish. Catalog names are treated as untrusted data, including in the agent guide.
 * **Preserve existing files.** All generated files carry an integrity footer. Refresh first checks every existing file, writes a complete sibling staging directory, then swaps directories, with rollback on a failed install. It refuses edited/foreign files and symbolic links/junctions, removes stale intact generated files, and uses a per-output lock to prevent competing exports. CRLF checkout line endings are normalized for integrity comparison. The footer detects accidental edits; it is not an authenticity signature. An interrupted process can leave a `.dbmapper-*` staging/backup directory; preserve any backup until you have verified the output. Add `.dbmapper-*` to your application's `.gitignore` to exclude these temporary artifacts.
 
@@ -117,7 +148,7 @@ uv run --no-project --with pyyaml python scripts/Validate-Okf.py examples/server
 
 The standalone self-check uses no test framework. The integration script needs Docker, starts a disposable SQL Server 2022 container bound only to loopback, creates a synthetic database and metadata-only login, and tests the real CLI and user-secrets path. It never uses a real project's secrets. Synthetic row values, SQL definitions and error details are checked for leakage, alongside key/index correctness, deterministic refresh and protection of hand-written files. Test database/secret resources are removed when the script finishes normally. The optional independent OKF check uses Python/PyYAML via `uv` and validates actual YAML, index rules, links and integrity footers; the installed tool has no Python dependency.
 
-The server integration checks also cover multiple read-only databases, system databases, escaped database names, duplicate table names, missing permissions, offline/inaccessible databases, deterministic partial results, and discovery-failure/cancellation preservation. Pass `-ToolPath <installed-dbmapper-command>` to `Test-Integration.ps1` to include actual packaged-process exports in both modes and, on Windows, junction protection checks.
+The server integration checks also cover multiple read-only databases, system databases, escaped database names, duplicate table names, missing permissions, offline/inaccessible databases, deterministic partial results, database selection, and targeted updates after live schema changes. They verify that unknown selections, failed updates and cancellation preserve output, that unselected databases retain their files, and that targeted updates work without server discovery permission. Pass `-ToolPath <installed-dbmapper-command>` to `Test-Integration.ps1` to include actual packaged-process exports in all modes and, on Windows, junction protection checks.
 
 Exit codes: `0` success/help; `1` sanitized configuration/filesystem/unexpected failure; `2` invalid arguments or a safety precondition; `3` sanitized SQL/discovery failure; `4` server export written with one or more databases skipped/failed; `130` cancellation before bundle replacement.
 

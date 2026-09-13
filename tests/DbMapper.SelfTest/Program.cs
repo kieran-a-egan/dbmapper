@@ -47,6 +47,20 @@ internal static partial class Program
         Check(!Options.Parse([]).AllDatabases, "single database remains the default");
         Check(Options.Parse(["--all-databases", "--connection", "Main", "--timeout", "7"]).AllDatabases, "server flag combines with value options");
         Throws(() => Options.Parse(["--all-databases", "--all-databases"]), "duplicate server flag refused");
+        Check(Options.Parse(["--database", "Application", "--database", "Sales, Archive"]).Databases.SequenceEqual(["Application", "Sales, Archive"]), "repeatable exact database selection without comma splitting");
+        Check(Options.Parse(["--update-database", "Application"]).UpdateDatabase == "Application", "targeted update option");
+        Throws(() => Options.Parse(["--database"]), "missing database selection");
+        Throws(() => Options.Parse(["--update-database", " "]), "empty update target");
+        Throws(() => Options.Parse(["--database", "App", "--database", "App"]), "duplicate selected database refused");
+        Throws(() => Options.Parse(["--update-database", "App", "--update-database", "Other"]), "multiple update targets refused");
+        Throws(() => Options.Parse(["--all-databases", "--database", "App"]), "all and selected modes conflict");
+        Throws(() => Options.Parse(["--all-databases", "--update-database", "App"]), "all and update modes conflict");
+        Throws(() => Options.Parse(["--database", "App", "--update-database", "App"]), "selection and update modes conflict");
+        Check(ServerReader.SelectNames(["App", "app", "Other"], ["App"]).SetEquals(["App"]), "selection excludes other and case-distinct databases");
+        Check(ServerReader.SelectNames(["App", "app"], Options.Parse(["--database", "App", "--database", "app"]).Databases).Count == 2, "case-distinct selections remain distinct");
+        Throws(() => ServerReader.SelectNames(["App"], ["app"]), "selection must match exact case");
+        Throws(() => ServerReader.SelectNames(["App"], ["App", "Missing"]), "missing selection is not silently omitted");
+        Throws(() => ServerReader.SelectNames(["App"], []), "empty selection cannot scan all databases");
         var target = "Odd; Database=another]";
         var changed = new SqlConnectionStringBuilder(CatalogReader.PrepareConnection("Server=localhost;Integrated Security=true", 9, target));
         Check(changed.InitialCatalog == target && changed.DataSource == "localhost" && changed.IntegratedSecurity, "database switching is literal and preserves authentication");
@@ -99,6 +113,27 @@ internal static partial class Program
             ValidateBundle(unusualFiles);
             Check(unusualFiles.Keys.All(p => !p.Contains("..", StringComparison.Ordinal)) && unusualFiles.Values.All(v => !v.Contains("\ntype: Evil", StringComparison.Ordinal)), "database names cannot inject paths or frontmatter");
             Throws(() => OkfBundle.RenderServer([databases[0], databases[0]]), "duplicate database paths refused");
+            var selectedFiles = OkfBundle.RenderServer([databases[0], databases[1]], selectedOnly: true);
+            Check(selectedFiles["server.md"].Contains("2 of 2 selected databases", StringComparison.Ordinal) && !selectedFiles.Values.Any(v => v.Contains("Archive", StringComparison.Ordinal)), "selected bundle reports only selected scope");
+            var changedServer = OkfBundle.UpdateServerDatabase(serverFiles, "Application", new SchemaModel());
+            ValidateBundle(changedServer);
+            var applicationDirectory = "databases/db-" + OkfBundle.Slug("Application") + "/";
+            Check(!changedServer.Keys.Any(p => p.StartsWith(applicationDirectory + "schemas/", StringComparison.Ordinal)), "targeted update removes stale target schemas");
+            Check(serverFiles.Where(p => p.Key.StartsWith("databases/", StringComparison.Ordinal) && !p.Key.StartsWith(applicationDirectory, StringComparison.Ordinal))
+                .All(p => changedServer[p.Key] == p.Value), "targeted update preserves other database pages and unchanged directory index");
+            Check(changedServer["server.md"].Contains("2 of 3 discovered databases", StringComparison.Ordinal), "targeted update retains unrelated failure status");
+            var recovered = OkfBundle.UpdateServerDatabase(changedServer, "Archive", Example());
+            ValidateBundle(recovered);
+            Check(recovered["server.md"].Contains("All discovered databases exported. Exported 3 of 3", StringComparison.Ordinal)
+                && !recovered["index.md"].Contains("Skipped:", StringComparison.Ordinal)
+                && !recovered["databases/index.md"].Contains("Skipped:", StringComparison.Ordinal), "target recovery updates report totals and navigation");
+            Check(recovered.OrderBy(p => p.Key).SequenceEqual(OkfBundle.UpdateServerDatabase(recovered, "Archive", Example()).OrderBy(p => p.Key)), "unchanged targeted update is deterministic");
+            Check(OkfBundle.UpdateServerDatabase(selectedFiles, "Application", model)["server.md"].Contains("2 of 2 selected databases", StringComparison.Ordinal), "targeted update retains selected scope");
+            ValidateBundle(OkfBundle.UpdateServerDatabase(unusualFiles, unusual[0].Name, new SchemaModel()));
+            Throws(() => OkfBundle.UpdateServerDatabase(serverFiles, "application", model), "targeted update requires exact existing name");
+            Throws(() => OkfBundle.UpdateServerDatabase(files, "Application", model), "single database bundle cannot be mistaken for a server bundle");
+            var missingIndex = new Dictionary<string, string>(serverFiles) { ["index.md"] = OkfBundle.IndexHeader };
+            Throws(() => OkfBundle.UpdateServerDatabase(missingIndex, "Application", model), "incomplete navigation refuses targeted update");
             var reordered = Example();
             reordered.Relations.Reverse();
             reordered.Relations[0].Columns.Reverse();
@@ -122,6 +157,13 @@ internal static partial class Program
                 Throws(() => { using var competing = new BundleWriter(output); }, "concurrent writer refused");
             }
             var first = ReadBundle(output);
+            using (var writer = new BundleWriter(output))
+                Check(writer.Read().OrderBy(p => p.Key).SequenceEqual(files.OrderBy(p => p.Key)), "bundle read strips only integrity footers");
+            var serverOutput = Path.Combine(temp, "server-bundle");
+            using (var writer = new BundleWriter(serverOutput)) writer.Write(serverFiles);
+            using (var writer = new BundleWriter(serverOutput)) writer.Write(OkfBundle.UpdateServerDatabase(writer.Read(), "Archive", Example()));
+            using (var writer = new BundleWriter(serverOutput))
+                Check(writer.Read().OrderBy(p => p.Key).SequenceEqual(OkfBundle.UpdateServerDatabase(serverFiles, "Archive", Example()).OrderBy(p => p.Key)), "targeted update round trips through sealed files");
             foreach (var path in Directory.GetFiles(output, "*.md", SearchOption.AllDirectories))
                 File.WriteAllText(path, File.ReadAllText(path).Replace("\n", "\r\n", StringComparison.Ordinal));
             using (var writer = new BundleWriter(output)) writer.Write(files);
@@ -145,6 +187,9 @@ internal static partial class Program
             Check(await Cli.RunAsync(["--help"], stdout, stderr) == 0 && stdout.ToString().Contains("v0.2", StringComparison.Ordinal), "offline CLI help");
             stdout.GetStringBuilder().Clear();
             Check(await Cli.RunAsync(["Password=PRIVATE_ARGUMENT"], stdout, stderr) == 2 && !stderr.ToString().Contains("PRIVATE_ARGUMENT", StringComparison.Ordinal), "raw argument redaction");
+            var missingOutput = Path.Combine(temp, "missing-bundle");
+            Check(await Cli.RunAsync(["--update-database", "PRIVATE_DATABASE", "--output", missingOutput], stdout, stderr) == 2
+                && !Directory.Exists(missingOutput) && !stderr.ToString().Contains("PRIVATE_DATABASE", StringComparison.Ordinal), "missing update bundle refused before reading secrets without leaking name");
         }
         finally { DeleteTemp(temp); }
 

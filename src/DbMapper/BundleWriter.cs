@@ -26,6 +26,20 @@ internal sealed class BundleWriter : IDisposable
         catch { gate.Dispose(); throw; }
     }
 
+    public Dictionary<string, string> Read()
+    {
+        ValidateExisting(target);
+        if (!Directory.Exists(target))
+            throw new UsageException("--update-database requires an existing server bundle. Create one with --all-databases or --database first.");
+        return Directory.GetFiles(target, "*.md", SearchOption.AllDirectories).ToDictionary(
+            path => Path.GetRelativePath(target, path).Replace('\\', '/'),
+            path =>
+            {
+                var content = File.ReadAllText(path, Encoding.UTF8).Replace("\r\n", "\n", StringComparison.Ordinal);
+                return content[..content.LastIndexOf(Marker, StringComparison.Ordinal)];
+            }, StringComparer.OrdinalIgnoreCase);
+    }
+
     public void Write(IReadOnlyDictionary<string, string> files)
     {
         var stage = Path.Combine(parent, ".dbmapper-" + Guid.NewGuid().ToString("N") + ".stage");

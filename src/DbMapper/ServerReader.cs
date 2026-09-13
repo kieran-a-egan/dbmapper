@@ -20,7 +20,8 @@ internal static class ServerReader
         ORDER BY name;
         """;
 
-    public static async Task<List<DatabaseScan>> ReadAsync(string connectionString, int timeout, CancellationToken cancellationToken)
+    public static async Task<List<DatabaseScan>> ReadAsync(string connectionString, int timeout, CancellationToken cancellationToken,
+        IReadOnlyList<string>? databases = null)
     {
         // Discover once, then use one fresh connection at a time. Names go through
         // SqlConnectionStringBuilder, never SQL interpolation or USE statements.
@@ -35,9 +36,9 @@ internal static class ServerReader
             if (!await reader.ReadAsync(cancellationToken))
                 throw new UsageException("SQL Server did not return discovery metadata. The existing bundle was preserved.");
             if (reader.GetInt32(0) is not (1 or 2 or 3 or 4 or 8))
-                throw new UsageException("--all-databases supports SQL Server and Azure SQL Managed Instance. Use single-database mode for Azure SQL Database and other endpoints.");
+                throw new UsageException("Database discovery supports SQL Server and Azure SQL Managed Instance. Use single-database mode for Azure SQL Database and other endpoints.");
             if (reader.GetInt32(1) != 1)
-                throw new UsageException("Server VIEW ANY DATABASE permission is required for --all-databases. The existing bundle was preserved.");
+                throw new UsageException("Server VIEW ANY DATABASE permission is required for database discovery. The existing bundle was preserved.");
             if (!await reader.NextResultAsync(cancellationToken))
                 throw new UsageException("SQL Server returned an incomplete database listing. The existing bundle was preserved.");
             while (await reader.ReadAsync(cancellationToken))
@@ -45,6 +46,11 @@ internal static class ServerReader
         }
         if (targets.Count == 0)
             throw new UsageException("No databases were visible to the selected login. The existing bundle was preserved.");
+        if (databases is not null)
+        {
+            var selected = SelectNames(targets.Select(t => t.Name), databases);
+            targets = targets.Where(t => selected.Contains(t.Name)).ToList();
+        }
 
         var results = new List<DatabaseScan>();
         foreach (var target in targets.OrderBy(t => t.Name, StringComparer.Ordinal))
@@ -76,5 +82,13 @@ internal static class ServerReader
             }
         }
         return results;
+    }
+
+    internal static HashSet<string> SelectNames(IEnumerable<string> available, IReadOnlyList<string> requested)
+    {
+        var selected = requested.ToHashSet(StringComparer.Ordinal);
+        if (selected.Count == 0 || selected.Count != requested.Count || !selected.IsSubsetOf(available))
+            throw new UsageException("A database selection is empty, repeated, or not visible. Use exact database names, including case. The existing bundle was preserved.");
+        return selected;
     }
 }

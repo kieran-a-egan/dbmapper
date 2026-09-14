@@ -6,13 +6,14 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>dbmapper</ToolCommandName>
     <PackageId>DbMapper.Tool</PackageId>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <Description>Export SQL Server catalog metadata from .NET user secrets to an OKF v0.2 Markdown bundle.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.7" />
     <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.12" />
+    <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="180.107.0" />
     <EmbeddedResource Include="Catalog.sql" />
     <None Include="../../README.md" Pack="true" PackagePath="/" />
     <InternalsVisibleTo Include="DbMapper.SelfTest" />

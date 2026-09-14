@@ -1,6 +1,6 @@
 # DbMapper
 
-An installable .NET command-line tool that reads a SQL Server connection string from an existing project's .NET user secrets and exports catalog metadata as a **Google Open Knowledge Format (OKF) v0.2** Markdown bundle for Claude Code and humans.
+An installable .NET command-line tool that exports SQL Server catalog metadata as a **Google Open Knowledge Format (OKF) v0.2** Markdown bundle for Claude Code and humans. Scan a database using an existing project's .NET user secrets, or create/update a bundle offline from local SQL files.
 
 ## Build and install
 
@@ -11,7 +11,7 @@ dotnet restore DbMapper.slnx
 dotnet build DbMapper.slnx -c Release --no-restore
 dotnet run --project tests/DbMapper.SelfTest -c Release --no-build
 dotnet pack src/DbMapper -c Release --no-build -o artifacts/packages
-dotnet tool install --global --add-source ./artifacts/packages DbMapper.Tool --version 0.2.0
+dotnet tool install --global --add-source ./artifacts/packages DbMapper.Tool --version 0.3.0
 ```
 
 The `.slnx` build entry point requires a recent SDK (9.0.200+). With an older .NET 8 SDK, build/pack the individual `.csproj` files instead. The installed tool targets .NET 8 and permits major runtime roll-forward.
@@ -99,6 +99,56 @@ A failed or cancelled targeted update preserves the entire previous bundle. Edit
 
 For the default single-database bundle, rerun the original `dbmapper` command after work; it already refreshes only the database named in the secret. Use a full or selected scan when you want to add/remove databases from a server bundle.
 
+## Update from a ticket or SQL file before committing
+
+Use `--sql` when a ticket's database changes have not been applied yet:
+
+```powershell
+# A ticket folder selects its in.sql file.
+dbmapper --sql ./tickets/12345 --output ./database-context
+
+# An explicit SQL file works too.
+dbmapper --sql ./tickets/12345/in.sql --output ./database-context
+
+# Choose one database in an existing server bundle.
+dbmapper --sql ./tickets/12345 --update-database Application --output ./server-context
+
+# Review before staging the bundle with the ticket changes.
+git diff -- ./database-context
+git status --short -- ./database-context
+```
+
+This updates the same schema pages, relationships and normal export status as a database refresh. It reads no project settings or user secrets, opens no database connection, and executes no SQL. It changes bundle files only: **it does not stage files, create a commit, or install a Git hook**. Run it after editing the ticket and before staging/committing. It reads the working-tree SQL, so stage the same SQL and bundle versions together.
+
+`--sql` accepts one file or folder per invocation, including paths outside the current repository. A folder must contain `in.sql`; `out.sql` is left alone. To apply a rollback, explicitly pass `--sql ./tickets/12345/out.sql`. Quote paths containing spaces. Apply multiple tickets in migration order.
+
+An existing single-database bundle supplies the starting model. If the output is missing or empty, the command starts with an empty model, allowing an initial export from `CREATE` statements. For a server bundle, `--update-database` must name an already exported database; other databases retain their files and status. `USE` and database-qualified names must stay within one database and agree with the target. Connection/project options, `--all-databases`, and `--database` cannot be combined with `--sql`.
+
+### Editing and rerunning a ticket
+
+An unchanged script is a no-op. Editing and rerunning the **most recently applied script** rebuilds its changes from its saved starting model. Earlier `ADD`/`CREATE` statements are not applied twice, and changes removed from the script are removed from the model too. A folder and its `in.sql` identify the same script.
+
+Commit the generated `sql-history.md` with the bundle. It contains structural metadata baselines and source/content hashes; no SQL text, expressions, values, timestamps or source paths. Run from the same project directory and keep ticket paths stable so source identities match. A database refresh replaces that scope's history with current catalog metadata.
+
+Editing an earlier script after applying later scripts is refused. Restore the bundle from before that script and reapply the scripts in order, or refresh from the database after the migrations run.
+
+### Supported local SQL
+
+The parser is [Microsoft SQL ScriptDOM](https://github.com/microsoft/SqlScriptDOM). Supported changes include:
+
+* Table creation, column additions/alterations/drops, and table drops.
+* Named primary/unique keys, foreign keys, checks, default-presence flags and `CHECK`/`NOCHECK` state.
+* Ordinary clustered/nonclustered indexes, ordered keys, included columns, filters, drops and supported rebuild/disable operations.
+* Procedure/function signatures and table/view trigger names through `CREATE`, `ALTER`, `CREATE OR ALTER`, and `DROP`; executable bodies are omitted.
+* Simple views selecting named columns from one known table/view, with aliases or explicit view-column names.
+* `GO`, `USE`, `BEGIN`/`END`, transaction begin/commit wrappers, common `SET` options, and constant `IF OBJECT_ID(...) IS NULL` / `IS NOT NULL` guards evaluated against local metadata.
+
+Data-only statements (`INSERT`, `UPDATE`, `DELETE`, `MERGE`, etc.) are ignored and never executed. Comments, values, default/check/filter expressions and executable definitions stay out of the bundle.
+
+Use exact schema/object/column names; unqualified objects default to `dbo`. Specify `NULL` or `NOT NULL` for new columns (primary keys and identity columns can imply non-nullability), and name keys/checks explicitly. Unspecified column collations remain unspecified; use explicit `COLLATE` where needed. Alias types retain their declared names without resolving their definitions.
+
+Unsupported constructs fail the entire update with a sanitized statement type and line number, preserving the bundle. These include dynamic SQL/procedure execution, arbitrary control flow, `SELECT INTO`, computed columns, complex views, temporary/cross-database objects, temporal/specialist tables, partitioned index definitions, and dropping pre-existing default constraints by name (catalog bundles only retain default presence). A `ROLLBACK` statement is not interpreted; rollback files must contain supported DDL. Use a database refresh when SQL Server must resolve omitted metadata.
+
 ## Output and Claude Code
 
 ```text
@@ -150,7 +200,9 @@ The standalone self-check uses no test framework. The integration script needs D
 
 The server integration checks also cover multiple read-only databases, system databases, escaped database names, duplicate table names, missing permissions, offline/inaccessible databases, deterministic partial results, database selection, and targeted updates after live schema changes. They verify that unknown selections, failed updates and cancellation preserve output, that unselected databases retain their files, and that targeted updates work without server discovery permission. Pass `-ToolPath <installed-dbmapper-command>` to `Test-Integration.ps1` to include actual packaged-process exports in all modes and, on Windows, junction protection checks.
 
-Exit codes: `0` success/help; `1` sanitized configuration/filesystem/unexpected failure; `2` invalid arguments or a safety precondition; `3` sanitized SQL/discovery failure; `4` server export written with one or more databases skipped/failed; `130` cancellation before bundle replacement.
+The offline checks cover file/folder selection, initial and existing bundles, edited/repeated scripts, explicit rollback files, server-target isolation, redaction and atomic failure. Integration also applies synthetic scripts to a disposable database and compares the resulting catalog bundle with the offline output.
+
+Exit codes: `0` success/help; `1` sanitized configuration/filesystem/unexpected failure; `2` invalid arguments, a safety precondition, or unsupported/malformed local SQL; `3` sanitized SQL/discovery failure; `4` server export written with one or more databases skipped/failed; `130` cancellation before bundle replacement.
 
 ## Format and platform references
 

@@ -119,6 +119,7 @@ internal static partial class Program
             Check(model.Routines.Single(r => r.Name == "FindCustomer").Parameters.Single(p => p.Name == "@Count").Output, "output parameter metadata");
             Check(model.Routines.Single(r => r.Name == "ScalarValue").Parameters.Any(p => p.Ordinal == 0 && p.Type == "decimal(18,2)"), "scalar return metadata");
             var files = OkfBundle.Render(model);
+            Check(files.OrderBy(p => p.Key).SequenceEqual(OkfBundle.Render(SqlModelReader.Read(files)).OrderBy(p => p.Key)), "existing live catalog metadata round trips for offline updates");
             ValidateBundle(files);
             var all = string.Join("\n", files.Values.Concat(files.Keys));
             foreach (var forbidden in new[] { "PRIVATE_", database, password, "127.0.0.1", "dbmapper_test_reader", "User ID=" })
@@ -173,6 +174,7 @@ internal static partial class Program
             await using var count = verify.CreateCommand();
             count.CommandText = "SELECT COUNT(*) FROM dbo.Customers WHERE Email = N'PRIVATE_ROW_SENTINEL';";
             Check(Convert.ToInt32(await count.ExecuteScalarAsync()) == 1, "fixture application data unchanged");
+            await OfflineSqlIntegration(admin, adminSecret!, temp);
             await ServerIntegration(admin, adminSecret!, readerBuilder.ConnectionString, database, project, secretId, temp);
         }
         finally

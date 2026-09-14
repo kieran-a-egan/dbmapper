@@ -13,6 +13,7 @@ internal static partial class Program
         try
         {
             await SelfTest();
+            await SqlFileTests();
             if (args.Contains("--integration", StringComparer.Ordinal)) await Integration();
             if (args is ["--write-example", var destination])
             {

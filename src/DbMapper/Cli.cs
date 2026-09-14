@@ -5,7 +5,7 @@ namespace DbMapper;
 internal sealed class UsageException(string message) : Exception(message);
 
 internal sealed record Options(string? Project, string? SecretsId, string? SecretKey, string Output, int Timeout, bool AllDatabases,
-    IReadOnlyList<string> Databases, string? UpdateDatabase)
+    IReadOnlyList<string> Databases, string? UpdateDatabase, string? Sql = null)
 {
     public static Options Parse(string[] args)
     {
@@ -15,6 +15,7 @@ internal sealed record Options(string? Project, string? SecretsId, string? Secre
         var allDatabases = false;
         var databases = new List<string>();
         string? updateDatabase = null;
+        string? sql = null;
         var seen = new HashSet<string>(StringComparer.Ordinal);
         for (var i = 0; i < args.Length; i++)
         {
@@ -25,7 +26,7 @@ internal sealed record Options(string? Project, string? SecretsId, string? Secre
                 allDatabases = true;
                 continue;
             }
-            if (option is not ("--project" or "--user-secrets-id" or "--connection" or "--secret-key" or "--output" or "--timeout" or "--database" or "--update-database"))
+            if (option is not ("--project" or "--user-secrets-id" or "--connection" or "--secret-key" or "--output" or "--timeout" or "--database" or "--update-database" or "--sql"))
                 throw new UsageException("Unknown argument. Run dbmapper --help; connection strings are never accepted as arguments.");
             if ((!seen.Add(option) && option != "--database") || ++i == args.Length || string.IsNullOrWhiteSpace(args[i]) || args[i].StartsWith("--", StringComparison.Ordinal))
                 throw new UsageException("Each option requires one non-empty value. Only --database may be repeated.");
@@ -39,6 +40,7 @@ internal sealed record Options(string? Project, string? SecretsId, string? Secre
                 case "--output": output = value; break;
                 case "--database": databases.Add(value); break;
                 case "--update-database": updateDatabase = value; break;
+                case "--sql": sql = value; break;
                 case "--timeout":
                     if (!int.TryParse(value, out timeout) || timeout is < 1 or > 300)
                         throw new UsageException("--timeout must be between 1 and 300 seconds.");
@@ -51,23 +53,29 @@ internal sealed record Options(string? Project, string? SecretsId, string? Secre
             throw new UsageException("Choose --all-databases, one or more --database options, or --update-database.");
         if (databases.Distinct(StringComparer.Ordinal).Count() != databases.Count)
             throw new UsageException("Each selected database may be supplied once. Use exact database names, including case.");
-        return new(project, id, key, Path.GetFullPath(output), timeout, allDatabases, databases, updateDatabase);
+        if (sql is not null && (allDatabases || databases.Count > 0 || project is not null || id is not null || key is not null || seen.Contains("--timeout")))
+            throw new UsageException("--sql is offline. Use --output and optionally --update-database; connection, project and scan options cannot be combined with it.");
+        return new(project, id, key, Path.GetFullPath(output), timeout, allDatabases, databases, updateDatabase, sql);
     }
 }
 
 internal static class Cli
 {
-    public const string Version = "0.2.0";
+    public const string Version = "0.3.0";
     public const string Help = """
         dbmapper - SQL Server metadata to Google Open Knowledge Format v0.2
 
-        Run inside a .NET project with an existing UserSecretsId and connection secret:
+        Catalog scans: run inside a .NET project with a UserSecretsId and connection secret:
           dbmapper
           dbmapper --connection DefaultConnection
           dbmapper --project src/Web/Web.csproj --secret-key Database:ConnectionString
           dbmapper --connection DefaultConnection --all-databases
           dbmapper --database Application --database Reporting --output server-context
           dbmapper --update-database Application --output server-context
+
+        Offline SQL: no .NET project, secrets or database connection required:
+          dbmapper --sql tickets/12345 --output database-context
+          dbmapper --sql tickets/12345/in.sql --update-database Application --output server-context
 
         --project <path>         .csproj or directory (default: current directory)
         --connection <name>      Select ConnectionStrings:<name> from user secrets
@@ -78,18 +86,23 @@ internal static class Cli
         --all-databases         Scan visible user/system databases; export database names
         --database <name>       Scan only this database; repeat to select several
         --update-database <name> Refresh one database in an existing server bundle
+        --sql <file-or-folder>   Update offline from a SQL file or a folder's in.sql
         --help                  Show help without reading secrets or connecting
         --version               Show version
 
-        With no key option, exactly one ConnectionStrings entry must exist.
+        For catalog scans without a key option, exactly one ConnectionStrings entry must exist.
         By default only the database explicitly named in that secret is inspected.
         --all-databases / --database discover via master with the same credentials.
         Database selections use exact names, including case, and replace the bundle.
         --update-database preserves other databases; a failed update preserves everything.
         Run it after schema work, then review the bundle diff before committing.
+        --sql parses supported SQL Server DDL without secrets or a database connection.
+        A folder selects in.sql only; pass out.sql explicitly to apply a rollback.
+        Repeating a script is safe; the latest script can be edited and reapplied.
+        It updates bundle files only. Review and stage them before committing.
         Unscannable databases are reported in server.md; incomplete exports exit 4.
-        Reads fixed system catalog queries; never reads table/view rows or definitions.
-        Requires database VIEW DEFINITION permission. Review identifiers before commit.
+        Catalog scans use fixed queries and require database VIEW DEFINITION permission.
+        Neither mode exports table/view rows or definitions. Review identifiers before commit.
         Refresh replaces only intact dbmapper output; edited/foreign files are refused.
         """;
 
@@ -109,6 +122,14 @@ internal static class Cli
             }
             var options = Options.Parse(args);
             using var bundle = new BundleWriter(options.Output);
+            if (options.Sql is not null)
+            {
+                var sqlFiles = SqlFileUpdate.Apply(options, Directory.Exists(options.Output) ? bundle.Read() : null, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                bundle.Write(sqlFiles);
+                await output.WriteLineAsync("Updated the OKF v0.2 bundle from the local SQL file. Review and stage the bundle before committing.");
+                return 0;
+            }
             Dictionary<string, string>? existing = null;
             if (options.UpdateDatabase is not null)
             {

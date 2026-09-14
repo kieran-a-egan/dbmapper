@@ -25,8 +25,8 @@ internal static partial class OkfBundle
         Add("index.md", root.ToString());
 
         var origin = databaseName is null
-            ? "from the database explicitly selected in a local .NET user secret. Database and server identities are intentionally absent."
-            : $"from database {Code(databaseName)}, discovered during a server-wide scan. Server identity and credentials are intentionally absent.";
+            ? "for this database scope. Database and server identities are intentionally absent."
+            : $"for database {Code(databaseName)}. Server identity and credentials are intentionally absent.";
         Add("database.md", Header("SQL Server Database", databaseName ?? "Database structure", "Scope and safety boundaries of this database context.") + $"""
             # Scope
 
@@ -161,8 +161,8 @@ internal static partial class OkfBundle
         return body.ToString();
     }
 
-    private static string Header(string type, string title, string description) =>
-        $"---\ntype: {JsonSerializer.Serialize(type)}\ntitle: {JsonSerializer.Serialize(title)}\ndescription: {JsonSerializer.Serialize(description)}\nstatus: draft\ngenerated:\n  by: dbmapper/{Cli.Version}\nsources:\n  - resource: \"SQL Server catalog metadata for this scope; credentials and server identity omitted\"\n---\n\n";
+    internal static string Header(string type, string title, string description) =>
+        $"---\ntype: {JsonSerializer.Serialize(type)}\ntitle: {JsonSerializer.Serialize(title)}\ndescription: {JsonSerializer.Serialize(description)}\nstatus: draft\ngenerated:\n  by: dbmapper/{Cli.Version}\nsources:\n  - resource: \"SQL Server schema metadata for this scope; credentials and server identity omitted\"\n---\n\n";
 
     internal static string Slug(string value)
     {

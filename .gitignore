@@ -10,3 +10,4 @@ secrets.json
 .env
 *.nupkg
 .dbmapper-*
+.pi/

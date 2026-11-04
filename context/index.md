@@ -49,6 +49,6 @@ This is the authoritative entry point for AI coding agents working on the existi
 2. The installed desktop application has no telemetry, external content, analytics, automatic updates or non-SQL-server egress. Configured SQL Server connections are the sole approved application network activity, subject to the unresolved ancillary-network question.
 3. GUI and CLI use the same core SQL catalog reader, SQL parser, OKF rendering and protected bundle writer. The GUI never shells out to the CLI.
 4. The GUI never writes before a current scan, a change preview, validation and explicit user confirmation. Failed scans, cancellation, changed destinations or rejected files leave the prior bundle intact.
-5. No application-data rows, SQL definitions, expressions, credentials or raw driver failures are exported or logged.
+5. Default exports are metadata-only. Live CLI exports can explicitly include stored module definitions under the [security boundary](architecture/security.md). Application-data rows, connection credentials and raw driver failures are excluded from exports and diagnostics. Definition text stays out of diagnostics, metadata caches and offline history.
 6. The desktop application and CLI are mutually exclusive at process level. This is the expressly approved exception to the CLI's normal compatibility contract.
 7. The generated OKF bundle and the development-project `context/` bundle are **different artifacts**. Never mix their ownership, locations or schemas.

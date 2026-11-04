@@ -20,9 +20,6 @@ internal static class SqlFileUpdate
         if (Directory.Exists(path)) path = Path.Combine(path, "in.sql");
         if (!path.EndsWith(".sql", StringComparison.OrdinalIgnoreCase) || !File.Exists(path))
             throw new UsageException("--sql requires an existing .sql file or a ticket folder containing in.sql.");
-        var script = File.ReadAllText(path, new UTF8Encoding(false, true)).Replace("\r\n", "\n", StringComparison.Ordinal);
-        var source = Hash(Path.GetRelativePath(Directory.GetCurrentDirectory(), path).Replace('\\', '/'));
-        var hash = Hash(script);
         var prefix = "";
         if (options.UpdateDatabase is not null)
         {
@@ -32,6 +29,11 @@ internal static class SqlFileUpdate
         }
         else if (existing?.ContainsKey("server.md") == true)
             throw new UsageException("Use --update-database with --sql to choose one database in the existing server bundle.");
+        if (existing?.TryGetValue(prefix + "database.md", out var overview) == true && OkfBundle.IncludesDefinitions(overview))
+            throw new UsageException("Offline SQL cannot update a database exported with SQL definitions. Refresh the target from SQL Server without --include-definitions before using --sql.");
+        var script = File.ReadAllText(path, new UTF8Encoding(false, true)).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var source = Hash(Path.GetRelativePath(Directory.GetCurrentDirectory(), path).Replace('\\', '/'));
+        var hash = Hash(script);
         var scope = existing?.Where(p => p.Key.StartsWith(prefix, StringComparison.Ordinal))
             .ToDictionary(p => p.Key[prefix.Length..], p => p.Value, StringComparer.OrdinalIgnoreCase);
         var history = new History(1, []);

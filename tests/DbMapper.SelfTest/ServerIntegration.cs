@@ -62,6 +62,21 @@ internal static partial class Program
             Check(await Cli.RunAsync(selectedArgs.Concat(["--database", "PRIVATE_MISSING_DATABASE"]).ToArray(), stdout, stderr) == 2
                 && selectedFirst.OrderBy(p => p.Key).SequenceEqual(ReadBundle(selectedOutput).OrderBy(p => p.Key)), "unknown selection preserves prior bundle");
 
+            var definitionOutput = Path.Combine(temp, "server-definitions");
+            var definitionArgs = new[] { "--project", project, "--output", definitionOutput, "--include-definitions" };
+            Check(await Cli.RunAsync([.. definitionArgs, "--all-databases"], stdout, stderr) == 0
+                && ReadBundle(definitionOutput).Values.Any(page => page.Contains("PRIVATE_VIEW_SENTINEL", StringComparison.Ordinal)),
+                "server-wide opt-in includes stored SQL");
+            Check(await Cli.RunAsync([.. definitionArgs, "--database", originalDatabase, "--database", second], stdout, stderr) == 0
+                && ReadBundle(definitionOutput).Values.Count(OkfBundle.IncludesDefinitions) == 2, "selected export marks both databases as opted in");
+            Check(await Cli.RunAsync(["--project", project, "--output", definitionOutput, "--update-database", originalDatabase], stdout, stderr) == 0
+                && ReadBundle(definitionOutput).Values.Count(OkfBundle.IncludesDefinitions) == 1
+                && !ReadBundle(definitionOutput).Values.Any(page => page.Contains("PRIVATE_VIEW_SENTINEL", StringComparison.Ordinal)),
+                "targeted refresh without opt-in removes SQL only from the refreshed database");
+            Check(await Cli.RunAsync([.. definitionArgs, "--update-database", originalDatabase], stdout, stderr) == 0
+                && ReadBundle(definitionOutput).Values.Any(page => page.Contains("PRIVATE_VIEW_SENTINEL", StringComparison.Ordinal)),
+                "targeted opt-in restores stored SQL");
+
             // Change both fixtures: a targeted update must pick up only the chosen
             // database, even when another database's live metadata has also changed.
             foreach (var name in new[] { originalDatabase, second })

@@ -17,7 +17,7 @@ tags: [standards, agents, pi-factory]
 ## Implementation discipline
 
 4. Work from one bounded [build-plan](../delivery/build-plan.md) unit with objective, prerequisites and named file scope. No speculative refactoring, features or unrelated edits.
-5. Respect dependency direction: CLI/Desktop → Core; UI does not access SQL, secrets or output files directly. Preserve fixed metadata-only SQL, strict privacy and bundle safety invariants.
+5. Respect dependency direction: CLI/Desktop → Core; UI does not access SQL, secrets or output files directly. Preserve fixed catalog SQL and the approved [privacy and bundle safety rules](../architecture/security.md).
 6. Capture backward-compatibility fixtures before changing existing CLI paths. Keep default CLI behaviours intact; do not allow GUI selection rules to leak into old CLI modes.
 7. Do not introduce cloud services, telemetry, external JS/fonts/CDNs, runtime package downloads, HTTP listeners, arbitrary SQL execution or Git operations inside DbMapper. Pi Software Factory itself may use external models during *development* only.
 8. Keep security-relevant changes small. For new dependencies, justify license, data handling, OS support and package provenance; the desktop host stays provisional until the feasibility gate passes.

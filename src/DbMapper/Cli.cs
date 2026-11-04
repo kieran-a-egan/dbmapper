@@ -5,7 +5,7 @@ namespace DbMapper;
 internal sealed class UsageException(string message) : Exception(message);
 
 internal sealed record Options(string? Project, string? SecretsId, string? SecretKey, string Output, int Timeout, bool AllDatabases,
-    IReadOnlyList<string> Databases, string? UpdateDatabase, string? Sql = null)
+    IReadOnlyList<string> Databases, string? UpdateDatabase, string? Sql = null, bool IncludeDefinitions = false)
 {
     public static Options Parse(string[] args)
     {
@@ -20,10 +20,10 @@ internal sealed record Options(string? Project, string? SecretsId, string? Secre
         for (var i = 0; i < args.Length; i++)
         {
             var option = args[i];
-            if (option == "--all-databases")
+            if (option is "--all-databases" or "--include-definitions")
             {
                 if (!seen.Add(option)) throw new UsageException("Each option may be supplied once.");
-                allDatabases = true;
+                if (option == "--all-databases") allDatabases = true;
                 continue;
             }
             if (option is not ("--project" or "--user-secrets-id" or "--connection" or "--secret-key" or "--output" or "--timeout" or "--database" or "--update-database" or "--sql"))
@@ -53,9 +53,12 @@ internal sealed record Options(string? Project, string? SecretsId, string? Secre
             throw new UsageException("Choose --all-databases, one or more --database options, or --update-database.");
         if (databases.Distinct(StringComparer.Ordinal).Count() != databases.Count)
             throw new UsageException("Each selected database may be supplied once. Use exact database names, including case.");
+        var includeDefinitions = seen.Contains("--include-definitions");
+        if (sql is not null && includeDefinitions)
+            throw new UsageException("--include-definitions requires a live catalog scan and cannot be combined with --sql.");
         if (sql is not null && (allDatabases || databases.Count > 0 || project is not null || id is not null || key is not null || seen.Contains("--timeout")))
             throw new UsageException("--sql is offline. Use --output and optionally --update-database; connection, project and scan options cannot be combined with it.");
-        return new(project, id, key, Path.GetFullPath(output), timeout, allDatabases, databases, updateDatabase, sql);
+        return new(project, id, key, Path.GetFullPath(output), timeout, allDatabases, databases, updateDatabase, sql, includeDefinitions);
     }
 }
 
@@ -86,6 +89,7 @@ internal static class Cli
         --all-databases         Scan visible user/system databases; export database names
         --database <name>       Scan only this database; repeat to select several
         --update-database <name> Refresh one database in an existing server bundle
+        --include-definitions   Include stored SQL for views, routines and table/view triggers (live only)
         --sql <file-or-folder>   Update offline from a SQL file or a folder's in.sql
         --help                  Show help without reading secrets or connecting
         --version               Show version
@@ -102,7 +106,9 @@ internal static class Cli
         It updates bundle files only. Review and stage them before committing.
         Unscannable databases are reported in server.md; incomplete exports exit 4.
         Catalog scans use fixed queries and require database VIEW DEFINITION permission.
-        Neither mode exports table/view rows or definitions. Review identifiers before commit.
+        Exports exclude table/view rows. By default they also exclude SQL definitions.
+        Opt-in definitions can contain sensitive literals, comments and embedded secrets. Review before committing or sharing.
+        Offline SQL updates require a metadata-only target. A live refresh without the flag removes definitions in its scope.
         Refresh replaces only intact dbmapper output; edited/foreign files are refused.
         """;
 
@@ -137,9 +143,11 @@ internal static class Cli
                 OkfBundle.RequireServerDatabase(existing, options.UpdateDatabase);
             }
             var connectionString = ProjectSecrets.Read(options);
+            if (options.IncludeDefinitions)
+                await output.WriteLineAsync("SQL definitions can contain sensitive literals, comments and embedded secrets. Review the output before committing or sharing.");
             if (options.UpdateDatabase is not null)
             {
-                var schema = await CatalogReader.ReadAsync(connectionString, options.Timeout, cancellationToken, options.UpdateDatabase);
+                var schema = await CatalogReader.ReadAsync(connectionString, options.Timeout, cancellationToken, options.UpdateDatabase, options.IncludeDefinitions);
                 var updated = OkfBundle.UpdateServerDatabase(existing!, options.UpdateDatabase, schema);
                 cancellationToken.ThrowIfCancellationRequested();
                 bundle.Write(updated);
@@ -150,7 +158,7 @@ internal static class Cli
             if (options.AllDatabases || options.Databases.Count > 0)
             {
                 var databases = await ServerReader.ReadAsync(connectionString, options.Timeout, cancellationToken,
-                    options.AllDatabases ? null : options.Databases);
+                    options.AllDatabases ? null : options.Databases, options.IncludeDefinitions);
                 var serverFiles = OkfBundle.RenderServer(databases, selectedOnly: !options.AllDatabases);
                 cancellationToken.ThrowIfCancellationRequested();
                 bundle.Write(serverFiles);
@@ -164,7 +172,7 @@ internal static class Cli
                 }
                 return 0;
             }
-            var model = await CatalogReader.ReadAsync(connectionString, options.Timeout, cancellationToken);
+            var model = await CatalogReader.ReadAsync(connectionString, options.Timeout, cancellationToken, includeDefinitions: options.IncludeDefinitions);
             var files = OkfBundle.Render(model);
             cancellationToken.ThrowIfCancellationRequested();
             bundle.Write(files);

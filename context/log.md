@@ -1,5 +1,15 @@
 # Knowledge change log
 
+## 2026-11-04
+
+- Approved and implemented explicit live CLI opt-in to stored SQL definitions. The default catalog and bundle stay metadata-only. Definition text is excluded from logs, cached metadata and offline history. Offline SQL updates require a metadata-only target.
+
+## 2026-10-10
+
+- Baseline run (00-baseline-and-host): added CLI characterisation tests (A01), byte-exact golden fixtures (A02) and offline safety tests (A03, partial: exit 3/4 and catalog-read cancellation need a live SQL connection). Self-test: 1475 checks. Uncommitted.
+- Desktop host spike (A04, disposable, `experiments/desktop-host/`): observed Windows x64 launch with no browser or hosted listener. Partial online egress observation (A05); egress-blocked run approved but not performed. Linux/macOS untested (A06).
+- User approved two spike decisions: WebView2 Evergreen as a Windows prerequisite, and the net9-computed Photino.Blazor path on net10. ADR-002 stays provisional; Q1 and Q2 stay open.
+
 ## 2026-10-08
 
 - Expanded the delivery plan from 12 high-level milestones into 51 bounded, dependency-ordered Pi Software Factory assignments. Added phase-specific assignment documents, progressive-retrieval index, execution runbook and explicit approval/verification gates. No implementation completion or test success is claimed.

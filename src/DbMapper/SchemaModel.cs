@@ -1,9 +1,13 @@
+using System.Text.Json.Serialization;
+
 namespace DbMapper;
 
 internal sealed class SchemaModel
 {
     public List<Relation> Relations { get; init; } = [];
     public List<Routine> Routines { get; init; } = [];
+    [JsonIgnore]
+    public Dictionary<(int ObjectId, string? TriggerName), string>? Definitions { get; init; }
 }
 
 internal sealed record Relation(int Id, string Schema, string Name, string Kind, string Temporal)

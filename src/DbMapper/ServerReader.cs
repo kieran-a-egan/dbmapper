@@ -21,7 +21,7 @@ internal static class ServerReader
         """;
 
     public static async Task<List<DatabaseScan>> ReadAsync(string connectionString, int timeout, CancellationToken cancellationToken,
-        IReadOnlyList<string>? databases = null)
+        IReadOnlyList<string>? databases = null, bool includeDefinitions = false)
     {
         // Discover once, then use one fresh connection at a time. Names go through
         // SqlConnectionStringBuilder, never SQL interpolation or USE statements.
@@ -68,7 +68,7 @@ internal static class ServerReader
             }
             try
             {
-                var schema = await CatalogReader.ReadAsync(connectionString, timeout, cancellationToken, target.Name);
+                var schema = await CatalogReader.ReadAsync(connectionString, timeout, cancellationToken, target.Name, includeDefinitions);
                 results.Add(new(target.Name, target.System, schema, "Exported."));
             }
             catch (UsageException)

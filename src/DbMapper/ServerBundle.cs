@@ -4,6 +4,9 @@ namespace DbMapper;
 
 internal static partial class OkfBundle
 {
+    private const string MetadataScanScope = "with the existing fixed metadata-only queries. The scope can include user databases, system databases and visible snapshots. No database is brought online or altered, and no application data or stored code is read/executed. Database names are intentionally included as structural identifiers; server addresses, credentials and raw error messages remain excluded.";
+    private const string DefinitionsScanScope = "with fixed catalog queries. The scope can include user databases, system databases and visible snapshots. No database is brought online or altered. The scan reads catalog metadata and any opted-in definitions without reading application rows or executing stored code. Check each database overview for definition coverage and review any stored SQL for sensitive content before sharing.";
+
     public static Dictionary<string, string> RenderServer(IReadOnlyList<DatabaseScan> databases, bool selectedOnly = false)
     {
         var files = Render(new SchemaModel());
@@ -31,7 +34,7 @@ internal static partial class OkfBundle
 
             # Scope
 
-            Discovery reads sys.databases in master using the same server, authentication and TLS settings as the selected user secret. Online and accessible databases within the scan scope are inspected sequentially with the existing fixed metadata-only queries. The scope can include user databases, system databases and visible snapshots. No database is brought online or altered, and no application data or stored code is read/executed. Database names are intentionally included as structural identifiers; server addresses, credentials and raw error messages remain excluded.
+            Discovery reads sys.databases in master using the same server, authentication and TLS settings as the selected user secret. Online and accessible databases within the scan scope are inspected sequentially {MetadataScanScope}
 
             {(selectedOnly ? "This bundle contains only the explicitly selected databases. Other discovered databases were not scanned and are outside its scope." : "This bundle includes every database returned by discovery.")}
 
@@ -74,6 +77,7 @@ internal static partial class OkfBundle
         files["index.md"] = index.ToString();
         Add("databases/index.md", directoryIndex.ToString());
         Add("server.md", report.ToString());
+        UpdateServerDefinitionGuidance(files);
         return files.ToDictionary(p => p.Key, p => p.Value.Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd() + "\n", StringComparer.OrdinalIgnoreCase);
 
         void Add(string path, string content)
@@ -116,6 +120,7 @@ internal static partial class OkfBundle
         start += heading.Length;
         var selectedOnly = report[start..end].EndsWith("selected databases.", StringComparison.Ordinal);
         files["server.md"] = report[..start] + ScanResult(rows.Count(row => row.EndsWith(" | Exported. |", StringComparison.Ordinal)), rows.Count, selectedOnly) + report[end..];
+        UpdateServerDefinitionGuidance(files);
         return files;
 
         void ReplaceLine(string path, string prefix, Func<string, string> replace)
@@ -128,6 +133,17 @@ internal static partial class OkfBundle
         }
 
         static UsageException Unsupported() => new("The existing server report is incomplete or uses an unsupported format. Refresh with --all-databases or --database first. The existing bundle was preserved.");
+    }
+
+    private static void UpdateServerDefinitionGuidance(Dictionary<string, string> files)
+    {
+        var includeDefinitions = files.Any(pair => pair.Key.EndsWith("/database.md", StringComparison.Ordinal) && IncludesDefinitions(pair.Value));
+        files["CLAUDE.md"] = includeDefinitions
+            ? files["CLAUDE.md"].Replace(MetadataGuide, DefinitionsGuide, StringComparison.Ordinal)
+            : files["CLAUDE.md"].Replace(DefinitionsGuide, MetadataGuide, StringComparison.Ordinal);
+        files["server.md"] = includeDefinitions
+            ? files["server.md"].Replace(MetadataScanScope, DefinitionsScanScope, StringComparison.Ordinal)
+            : files["server.md"].Replace(DefinitionsScanScope, MetadataScanScope, StringComparison.Ordinal);
     }
 
     private static string ScanResult(int exported, int count, bool selectedOnly)

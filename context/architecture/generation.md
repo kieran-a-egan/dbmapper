@@ -18,12 +18,14 @@ The core uses a complete scanned `SchemaModel` to compute references, then proje
 
 | Entry point | Operation | Scope outcome |
 | --- | --- | --- |
-| CLI existing options | Single database, server-wide, selected database(s), targeted database and offline SQL | Exactly existing semantics, args and exit codes apart from approved process-exclusivity refusal |
+| CLI existing options | Single database, server-wide, selected database(s), targeted database and offline SQL | Preserve existing default semantics and exit codes, including the approved process-exclusivity exception. Live scans accept `--include-definitions`. |
 | GUI Full Generate | Selected databases and selected objects | Replaces generated server-wide bundle scope, deleting stale intact generated pages for deselected objects after preview/confirmation |
 | GUI Targeted Refresh | One already exported database | Re-scans and replaces only the object's previous selected pages in that database; all other database subtrees preserved |
 | GUI Offline SQL | One chosen SQL file/ticket plus selected bundle/database and saved object scope | Apply supported SQL to full structural baseline and project selected output; report unselected effects, no new object auto-selection |
 
 For any equal full-selection server-wide schema, GUI and CLI must generate **byte-identical files** using shared renderer settings. Preserve existing paths/frontmatter, integrity footers, escaping, ordering and deterministic output; changes to version/provenance fields require explicit compatibility review. GUI live output is always server-wide even with one database. Refuse GUI overwrite/conversion of an existing single-database CLI bundle and request another destination.
+
+Record the live definition opt-in per exported database. Targeted CLI refreshes replace that database's content and opt-in state according to the current invocation. Offline SQL refuses an opted-in target and preserves its existing files. Other databases in the bundle are independent.
 
 ## Preview and commit lifecycle
 

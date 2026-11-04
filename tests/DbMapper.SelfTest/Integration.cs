@@ -69,8 +69,10 @@ internal static partial class Program
                     """);
                 await Execute(fixture, "CREATE VIEW dbo.CustomerView AS SELECT TenantId, Id, N'PRIVATE_VIEW_SENTINEL' AS Constant FROM dbo.Customers;");
                 await Execute(fixture, "CREATE PROCEDURE dbo.FindCustomer @TenantId int, @Hint nvarchar(20) = N'PRIVATE_PARAM', @Count int OUTPUT AS SELECT @Count = 1; SELECT N'PRIVATE_PROCEDURE_SENTINEL';");
-                await Execute(fixture, "CREATE FUNCTION dbo.ScalarValue(@Amount decimal(18,2)) RETURNS decimal(18,2) AS BEGIN RETURN @Amount; END;");
+                await Execute(fixture, "CREATE FUNCTION dbo.ScalarValue(@Amount decimal(18,2)) RETURNS decimal(18,2) AS BEGIN /* PRIVATE_FUNCTION_SENTINEL */ RETURN @Amount; END;");
+                await Execute(fixture, "CREATE PROCEDURE dbo.EncryptedProcedure WITH ENCRYPTION AS SELECT N'PRIVATE_ENCRYPTED_SENTINEL';");
                 await Execute(fixture, "CREATE TRIGGER dbo.CustomerGuard ON dbo.Customers AFTER UPDATE AS BEGIN SET NOCOUNT ON; DECLARE @Secret nvarchar(100) = N'PRIVATE_TRIGGER_SENTINEL'; END;");
+                await Execute(fixture, "CREATE TRIGGER dbo.CustomerViewGuard ON dbo.CustomerView INSTEAD OF INSERT AS BEGIN SET NOCOUNT ON; /* PRIVATE_VIEW_TRIGGER_SENTINEL */ END;");
                 await Execute(fixture, """
                     CREATE USER [dbmapper_test_reader] FOR LOGIN [dbmapper_test_reader];
                     GRANT CONNECT TO [dbmapper_test_reader];
@@ -101,7 +103,7 @@ internal static partial class Program
             }
             Console.WriteLine("Testing catalog extraction with denied row access and a read-only fixture database...");
             var model = await CatalogReader.ReadAsync(readerBuilder.ConnectionString, 10, CancellationToken.None);
-            Check(model.Relations.Count == 3 && model.Routines.Count == 2, "real table/view/routine coverage");
+            Check(model.Relations.Count == 3 && model.Routines.Count == 3, "real table/view/routine coverage");
             var customers = model.Relations.Single(r => r.Name == "Customers");
             var orders = model.Relations.Single(r => r.Name == "Orders");
             Check(customers.Columns.Single(c => c.Name == "Secret").HasDefault, "default presence without value");
@@ -151,6 +153,21 @@ internal static partial class Program
             }
             Check(await Cli.RunAsync(arguments, stdout, stderr) == 0, "real CLI refresh");
             Check(first.OrderBy(x => x.Key).SequenceEqual(ReadBundle(output).OrderBy(x => x.Key)), "live refresh identical bytes");
+            var definitionOutput = Path.Combine(temp, "definitions");
+            Check(await Cli.RunAsync(["--project", project, "--output", definitionOutput, "--include-definitions"], stdout, stderr) == 0,
+                "definition export works with metadata-only login and denied row access");
+            var definitionPages = ReadBundle(definitionOutput);
+            foreach (var (name, sentinel) in new[]
+            {
+                ("view-customerview", "PRIVATE_VIEW_SENTINEL"), ("view-customerview", "PRIVATE_VIEW_TRIGGER_SENTINEL"),
+                ("routine-findcustomer", "PRIVATE_PROCEDURE_SENTINEL"), ("routine-findcustomer", "PRIVATE_PARAM"),
+                ("routine-scalarvalue", "PRIVATE_FUNCTION_SENTINEL"), ("table-customers", "PRIVATE_TRIGGER_SENTINEL"),
+                ("routine-encryptedprocedure", "SQL definition unavailable.")
+            })
+                Check(definitionPages.Single(p => Path.GetFileName(p.Key).StartsWith(name + "-", StringComparison.Ordinal)).Value
+                    .Contains(sentinel, StringComparison.Ordinal), "live definition coverage for " + name);
+            foreach (var forbidden in new[] { "PRIVATE_ROW_", "PRIVATE_ORDER_", "PRIVATE_DEFAULT_", "PRIVATE_COMPUTED_", "PRIVATE_FILTER_", "PRIVATE_CHECK_", "PRIVATE_PROPERTY_", "PRIVATE_ENCRYPTED_", password })
+                Check(!definitionPages.Values.Any(page => page.Contains(forbidden, StringComparison.Ordinal)), "opt-in bundle excludes unrelated private data");
             Check(!Directory.GetFiles(temp, "*", SearchOption.AllDirectories).Any(p => File.ReadAllText(p).Contains(password, StringComparison.Ordinal)), "no connection secret copied to project");
 
             var wrongPassword = new SqlConnectionStringBuilder(readerBuilder.ConnectionString) { Password = "PRIVATE_BAD_PASSWORD" };

@@ -14,6 +14,10 @@ internal static partial class Program
         {
             await SelfTest();
             await SqlFileTests();
+            await CliContractTests();
+            BundleGoldenTests();
+            await OfflineSafetyTests();
+            await DefinitionTests();
             if (args.Contains("--integration", StringComparer.Ordinal)) await Integration();
             if (args is ["--write-example", var destination])
             {
@@ -24,6 +28,11 @@ internal static partial class Program
             {
                 using var writer = new BundleWriter(serverDestination);
                 writer.Write(OkfBundle.RenderServer(ServerExample()));
+            }
+            if (args is ["--write-definitions-example", var definitionsDestination])
+            {
+                using var writer = new BundleWriter(definitionsDestination);
+                writer.Write(OkfBundle.Render(DefinitionExample()));
             }
             Console.WriteLine($"PASS: {checks} checks" + (args.Contains("--integration", StringComparer.Ordinal) ? " including live SQL Server, CLI and user-secrets integration." : "."));
             return 0;

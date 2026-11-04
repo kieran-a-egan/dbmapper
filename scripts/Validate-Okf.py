@@ -8,6 +8,22 @@ import sys
 import yaml
 
 
+def prose(text: str) -> str:
+    """Exclude SQL fences emitted by DbMapper from the Markdown link scan."""
+    lines = []
+    fence = None
+    for line in text.split("\n"):
+        if fence is not None:
+            if line == fence:
+                fence = None
+        elif match := re.fullmatch(r"(`{3,})sql", line):
+            fence = match[1]
+        else:
+            lines.append(line)
+    assert fence is None, "Unclosed SQL fence"
+    return "\n".join(lines)
+
+
 def validate(directory: Path) -> None:
     root = directory.resolve(strict=True)
     files = list(root.rglob("*.md"))
@@ -33,7 +49,7 @@ def validate(directory: Path) -> None:
             assert re.fullmatch(r"dbmapper/\d+\.\d+\.\d+", frontmatter["generated"]["by"]), "Missing producer identity"
             assert "verified" not in frontmatter, "No independent verification is claimed"
             assert all(isinstance(s.get("resource"), str) and s["resource"] for s in frontmatter["sources"]), "Missing source descriptor"
-        for link in re.findall(r"\]\(([^)]+\.md)\)", text):
+        for link in re.findall(r"\]\(([^)]+\.md)\)", prose(text)):
             target = (path.parent / link).resolve()
             assert target.is_relative_to(root) and target.is_file(), "Broken or out-of-bundle link"
         content, marker = text.rsplit("\n<!-- dbmapper:sha256=", 1)

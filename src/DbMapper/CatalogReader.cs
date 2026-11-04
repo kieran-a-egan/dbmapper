@@ -4,6 +4,20 @@ namespace DbMapper;
 
 internal static class CatalogReader
 {
+    private const string DefinitionsQuery = """
+        SELECT o.object_id, CAST(NULL AS sysname), m.definition
+        FROM sys.objects AS o
+        JOIN sys.sql_modules AS m ON m.object_id = o.object_id
+        WHERE o.type IN ('V', 'P', 'PC', 'FN', 'IF', 'TF', 'FS', 'FT') AND o.is_ms_shipped = 0
+        UNION ALL
+        SELECT tr.parent_id, tr.name, m.definition
+        FROM sys.triggers AS tr
+        JOIN sys.objects AS o ON o.object_id = tr.parent_id
+        JOIN sys.sql_modules AS m ON m.object_id = tr.object_id
+        WHERE tr.parent_class = 1 AND tr.is_ms_shipped = 0
+          AND o.type IN ('U', 'V') AND o.is_ms_shipped = 0;
+        """;
+
     internal static string PrepareConnection(string value, int timeout, string? database = null)
     {
         SqlConnectionStringBuilder builder;
@@ -35,18 +49,19 @@ internal static class CatalogReader
         }
     }
 
-    public static async Task<SchemaModel> ReadAsync(string connectionString, int timeout, CancellationToken cancellationToken, string? database = null)
+    public static async Task<SchemaModel> ReadAsync(string connectionString, int timeout, CancellationToken cancellationToken,
+        string? database = null, bool includeDefinitions = false)
     {
         await using var connection = new SqlConnection(PrepareConnection(connectionString, timeout, database));
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = Query;
+        command.CommandText = includeDefinitions ? Query + "\n" + DefinitionsQuery : Query;
         command.CommandTimeout = timeout;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken) || reader.GetInt32(0) != 1)
             throw new UsageException("Database VIEW DEFINITION permission is required. The tool refuses a silently partial metadata export.");
 
-        var model = new SchemaModel();
+        var model = new SchemaModel { Definitions = includeDefinitions ? new() : null };
         var relations = new Dictionary<int, Relation>();
         var indexes = new Dictionary<(int, int), DbIndex>();
         var foreignKeys = new Dictionary<int, ForeignKey>();
@@ -109,6 +124,13 @@ internal static class CatalogReader
         await Next();
         while (await reader.ReadAsync(cancellationToken))
             routines[Number(0)].Parameters.Add(new(Number(1), Text(2), Text(3), Flag(4), Flag(5)));
+        if (model.Definitions is { } definitions)
+        {
+            await Next();
+            while (await reader.ReadAsync(cancellationToken))
+                if (!reader.IsDBNull(2))
+                    definitions.Add((Number(0), reader.IsDBNull(1) ? null : Text(1)), Text(2));
+        }
         if (await reader.NextResultAsync(cancellationToken))
             throw new UsageException("Unexpected catalog results were returned. The export was refused.");
         return model;

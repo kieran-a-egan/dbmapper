@@ -11,7 +11,7 @@ tags: [architecture, data, cache, privacy]
 ## Authoritative vs derived state
 
 1. **SQL Server** is the source of truth for live catalog metadata; the current permission-limited snapshot is not a guarantee of globally complete server visibility.
-2. **Full metadata model** retains supported structural information about scanned objects, including unselected objects needed for relationships and offline updates. It must never contain row contents, executable SQL text or credentials.
+2. **Full metadata model** retains supported structural information about scanned objects, including unselected objects needed for relationships and offline updates. Row contents and credentials are excluded. A transient, nonserialized attachment carries module text during explicitly opted-in live CLI exports. Cached metadata and offline history contain structural data only.
 3. **Selections** are a separate set of explicit identifiers per database and object category. Changing a filter or viewing metadata never changes selections implicitly.
 4. **Projection/output** includes only selected object pages and references; it does not become the sole source for reconstructing a full metadata model.
 5. **Cache** is a local, unverified copy after disconnection; it may support browsing, never substitute for the required fresh scan before live generation.

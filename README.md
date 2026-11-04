@@ -99,6 +99,18 @@ A failed or cancelled targeted update preserves the entire previous bundle. Edit
 
 For the default single-database bundle, rerun the original `dbmapper` command after work; it already refreshes only the database named in the secret. Use a full or selected scan when you want to add/remove databases from a server bundle.
 
+## Include stored SQL definitions
+
+```powershell
+dbmapper --include-definitions --output ./database-context
+dbmapper --database Application --include-definitions --output ./server-context
+dbmapper --update-database Application --include-definitions --output ./server-context
+```
+
+Add `--include-definitions` to any live scan, including `--all-databases`. DbMapper adds the stored SQL to view, procedure and function pages and places table/view trigger definitions on their parent pages. Definitions may be unavailable for encrypted objects, CLR modules or objects whose definitions SQL Server withholds. Database and server DDL triggers are outside the export scope.
+
+**Review definitions before committing or sharing.** The SQL is included in full and may contain sensitive literals, comments and embedded secrets. Default scans remain metadata-only. A live refresh without the flag removes definitions in its refreshed scope. With `--update-database`, other databases keep their existing files and definition settings.
+
 ## Update from a ticket or SQL file before committing
 
 Use `--sql` when a ticket's database changes have not been applied yet:
@@ -123,6 +135,8 @@ This updates the same schema pages, relationships and normal export status as a 
 `--sql` accepts one file or folder per invocation, including paths outside the current repository. A folder must contain `in.sql`; `out.sql` is left alone. To apply a rollback, explicitly pass `--sql ./tickets/12345/out.sql`. Quote paths containing spaces. Apply multiple tickets in migration order.
 
 An existing single-database bundle supplies the starting model. If the output is missing or empty, the command starts with an empty model, allowing an initial export from `CREATE` statements. For a server bundle, `--update-database` must name an already exported database; other databases retain their files and status. `USE` and database-qualified names must stay within one database and agree with the target. Connection/project options, `--all-databases`, and `--database` cannot be combined with `--sql`.
+
+Offline SQL requires a metadata-only target. If you exported definitions for that database, refresh it from SQL Server without `--include-definitions` before using `--sql`. Other databases in the same bundle can still be updated offline if they are metadata-only.
 
 ### Editing and rerunning a ticket
 
@@ -179,7 +193,7 @@ Or tell Claude Code to start with `database-context/index.md` and follow the rel
 
 * **Fixed catalog queries only.** The embedded, reviewable [Catalog.sql](src/DbMapper/Catalog.sql) selects only explicit fields from `sys` catalogs and checks metadata permission; [ServerReader.cs](src/DbMapper/ServerReader.cs) adds fixed server/database discovery queries. No dynamic SQL, user-table/view row reads, stored-code execution, DDL or DML. Session settings bound lock waits to five seconds and lower deadlock priority. No transactions are enlisted; pooling and connection retries are disabled. `ApplicationIntent=ReadOnly` is a routing hint, not a database-enforced read-only mode.
 * **Metadata login.** Use a dedicated login with `CONNECT` and database `VIEW DEFINITION`, with no application-data read/write or DDL permissions. A DBA can grant `VIEW DEFINITION TO [your_metadata_user]` in the selected database. The tool refuses exports without database-level metadata visibility. Object-level denials can still affect visibility; it does not claim a complete or transactionally consistent snapshot. Run during a quiet schema window.
-* **Exclude risky fields at the query boundary.** No rows, samples, row counts, statistics, current identity/sequence values, SQL definitions, expression text, default literals, comments, extended properties, users, server names or file paths. Database names are used/exported only for server bundles (`--all-databases`, `--database`, `--update-database`). Defaults/computed/check/filter expressions can hold sensitive literals, so only their presence/state is exported. There is no unsafe include-definitions switch. SQL exceptions, configuration errors and raw arguments are never printed.
+* **Exclude risky fields at the query boundary.** Default scans exclude SQL definitions, expression text, default literals and comments. Live scans can explicitly opt in to module text with `--include-definitions`. All scans exclude application rows, samples, row counts, statistics, current identity/sequence values and extended properties. Database names are exported as structural metadata only for server bundles. Only the presence or state of separate default, computed, check and filter expressions is exported. SQL exceptions, configuration errors and raw arguments are never printed.
 * **Review identifiers.** Table/column/index/routine names and declared SQL types remain visible because they are essential development context. They can themselves be confidential. This is suitable for review and committing as schema documentation, not a guarantee that arbitrary names are safe to publish. Catalog names are treated as untrusted data, including in the agent guide.
 * **Preserve existing files.** All generated files carry an integrity footer. Refresh first checks every existing file, writes a complete sibling staging directory, then swaps directories, with rollback on a failed install. It refuses edited/foreign files and symbolic links/junctions, removes stale intact generated files, and uses a per-output lock to prevent competing exports. CRLF checkout line endings are normalized for integrity comparison. The footer detects accidental edits; it is not an authenticity signature. An interrupted process can leave a `.dbmapper-*` staging/backup directory; preserve any backup until you have verified the output. Add `.dbmapper-*` to your application's `.gitignore` to exclude these temporary artifacts.
 

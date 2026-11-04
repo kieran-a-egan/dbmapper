@@ -8,7 +8,7 @@ tags: [architecture, decision, desktop, photino]
 
 # ADR-002: Cross-platform Desktop Host (Provisional)
 
-**Status note (2026-10-10).** User approved two spike-stage decisions: WebView2 Evergreen is accepted as a Windows runtime prerequisite, and the net9-computed Photino.Blazor path on net10 is accepted. The ADR stays `draft` / provisional: Linux and macOS are untested, WebView2 absence behaviour is untested, manual picker and close/reopen checks are pending, and egress isolation (Q2) is unresolved. Evidence: `experiments/desktop-host/FINDINGS.md`.
+**Status note (2026-11-04).** The disposable Windows spike was removed. Its findings remain in Git history and are summarized in the [open questions](../../delivery/open-questions.md). The spike-stage approvals covered WebView2 Evergreen as a Windows prerequisite and the net9-computed Photino.Blazor path on net10. The ADR stays provisional pending desktop runtime and privacy verification.
 
 **Decision.** Target .NET 10 and use **Photino.Blazor provisionally** to render bundled local Blazor/CSS content inside a standalone OS desktop window; do not open a default browser. No hosted Blazor server, CDN or network UI. Do not finalize dependencies before proving the host can satisfy privacy, startup and distribution requirements on every supported platform.
 

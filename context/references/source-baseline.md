@@ -52,7 +52,7 @@ Stdout and stderr use the application-authored text only. The planted-secret che
 ## Upstream technical references
 
 - [Photino.Blazor package](https://www.nuget.org/packages/Photino.Blazor/) — published builds advertise net8/net9 direct support and net10 computed compatibility; this is **not** evidence of MVP validation.
-- Pinned in the disposable spike (`experiments/desktop-host/`, not product): Photino.Blazor 4.0.13, Photino.NET 4.0.16, Photino.Native 4.0.22, Microsoft.AspNetCore.Components.WebView 9.0.1 — all observed on Windows x64 only (see `experiments/desktop-host/FINDINGS.md`).
+- Historical versions in the removed Windows x64 spike were Photino.Blazor 4.0.13, Photino.NET 4.0.16, Photino.Native 4.0.22 and Microsoft.AspNetCore.Components.WebView 9.0.1. See [ADR-002](../architecture/decisions/002-desktop-host.md).
 - Baseline self-test before this run: 797 checks; after A01–A03 characterisation: 1475 checks (`dotnet run --project tests/DbMapper.SelfTest -c Release --no-build`).
 - [Photino.Blazor documentation](https://docs.tryphotino.io/Photino-Blazor) — desktop WebView architecture.
 - [Microsoft SqlClient](https://learn.microsoft.com/en-us/sql/connect/ado-net/microsoft-ado-net-sql-server), [SQL Server catalog visibility](https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-databases-transact-sql) — follow existing safety assumptions.

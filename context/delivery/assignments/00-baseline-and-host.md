@@ -41,6 +41,8 @@ tags: [delivery, factory, assignments]
 
 ## A04 — Prove Windows native host viability
 
+The earlier disposable Windows experiment was removed. A04–A06 still describe the evidence needed for the desktop feasibility gate.
+
 - **Prerequisites:** None.
 - **Owned scope (planning guidance):** `experiments/desktop-host/` (new), `context/delivery/open-questions.md`. Update only directly relevant tests and approved OKF delivery state; do not rewrite unrelated code.
 - **Factory objective:** Build disposable .NET 10 Photino.Blazor Windows x64 host with bundled local UI, single native window, close/reopen and directory picker. Record package/license, required OS dependencies and exact build/run commands; never merge prototype into product project.

@@ -268,14 +268,23 @@ internal static partial class Program
         .ToDictionary(p => Path.GetRelativePath(directory, p), File.ReadAllText, StringComparer.Ordinal);
     private static string NewTemp()
     {
-        var path = Path.Combine(Path.GetTempPath(), "dbmapper-selftest-" + Guid.NewGuid().ToString("N"));
+        var path = Path.Combine(PhysicalDirectory(new(Path.GetTempPath())).FullName, "dbmapper-selftest-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
     }
+
+    private static DirectoryInfo PhysicalDirectory(DirectoryInfo directory)
+    {
+        if (directory.Parent is not { } parent) return directory;
+        // macOS temp paths may use /var, a symlink to /private/var.
+        var physical = new DirectoryInfo(Path.Combine(PhysicalDirectory(parent).FullName, directory.Name));
+        return (DirectoryInfo?)physical.ResolveLinkTarget(returnFinalTarget: true) ?? physical;
+    }
+
     private static void DeleteTemp(string path)
     {
         var resolved = Path.GetFullPath(path);
-        if (!resolved.StartsWith(Path.GetFullPath(Path.GetTempPath()), StringComparison.OrdinalIgnoreCase) || !Path.GetFileName(resolved).StartsWith("dbmapper-selftest-", StringComparison.Ordinal))
+        if (Path.GetDirectoryName(resolved) != PhysicalDirectory(new(Path.GetTempPath())).FullName || !Path.GetFileName(resolved).StartsWith("dbmapper-selftest-", StringComparison.Ordinal))
             throw new CheckFailure("FAIL: unsafe test cleanup path");
         Directory.Delete(resolved, recursive: true);
     }

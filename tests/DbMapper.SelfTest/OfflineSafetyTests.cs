@@ -47,6 +47,20 @@ internal static partial class Program
             var editedBefore = ReadBundle(edited);
             Check(await RunSql(script, edited) == 2 && editedBefore.OrderBy(p => p.Key).SequenceEqual(ReadBundle(edited).OrderBy(p => p.Key)), "edited generated file refused and whole bundle kept");
 
+            if (!OperatingSystem.IsWindows())
+            {
+                var link = Path.Combine(temp, "linked-output");
+                Directory.CreateSymbolicLink(link, foreign);
+                Directory.CreateSymbolicLink(Path.Combine(output, "linked-child"), foreign);
+                foreach (var candidate in new[] { link, Path.Combine(link, "nested"), output })
+                {
+                    var refused = await RunCli("--sql", script, "--output", candidate);
+                    Check(refused.Code == 2 && refused.Err.Contains("symbolic links or junctions", StringComparison.Ordinal),
+                        "Unix symbolic link refused");
+                }
+                Check(File.ReadAllText(notes) == "Keep these notes", "linked target kept");
+            }
+
             // Locking: a concurrent export holding the output gate refuses the replay and creates nothing.
             var locked = Path.Combine(temp, "locked");
             using (var holder = new BundleWriter(locked))

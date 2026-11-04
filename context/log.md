@@ -2,6 +2,7 @@
 
 ## 2026-11-04
 
+- Removed the disposable desktop host experiment and added CLI build, self-test and installed-package smoke coverage for Windows x64, Linux x64 and Intel/Apple Silicon macOS. Desktop host feasibility remains governed by ADR-002.
 - Approved and implemented explicit live CLI opt-in to stored SQL definitions. The default catalog and bundle stay metadata-only. Definition text is excluded from logs, cached metadata and offline history. Offline SQL updates require a metadata-only target.
 
 ## 2026-10-10

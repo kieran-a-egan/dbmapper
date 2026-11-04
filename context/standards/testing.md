@@ -23,6 +23,7 @@ tags: [standards, testing, ci]
 
 ## Cross-platform verification
 
+- For the existing CLI, run deterministic self-tests and install the local `DbMapper.Tool` package on Windows x64, Linux x64 and macOS Intel/Apple Silicon. Run a packaged offline export without SQL Server or credentials. These checks are separate from desktop feasibility and distribution.
 - GitHub Actions builds and tests self-contained `win-x64`, `linux-x64`, `osx-x64`, `osx-arm64` portable distributions. Suggested archive formats: ZIP, TAR.GZ, ZIP `.app`, ZIP `.app` respectively.
 - Launch/close native-window smoke tests in CI where runner capabilities permit. Verify bundled assets, directory selection, native WebView startup and no unexpected download.
 - Before MVP release, manually test each architecture and Ubuntu 22.04/24.04 plus selected Debian and Fedora versions. Signing/notarization are deferred for internal use; document launch warnings.

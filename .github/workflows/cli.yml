@@ -1,0 +1,36 @@
+name: CLI
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-24.04, macos-15-intel, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - run: dotnet build DbMapper.slnx -c Release
+      - run: dotnet run --project tests/DbMapper.SelfTest -c Release --no-build
+      - run: dotnet pack src/DbMapper -c Release --no-build -o artifacts/packages
+      - name: Install and exercise the packaged tool
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          dotnet tool install --tool-path ./artifacts/tool --source ./artifacts/packages DbMapper.Tool
+          $tool = if ($IsWindows) { './artifacts/tool/dbmapper.exe' } else { './artifacts/tool/dbmapper' }
+          & $tool --version
+          Set-Content -LiteralPath ./artifacts/smoke.sql -Value 'CREATE TABLE dbo.Smoke (Id int NOT NULL);'
+          & $tool --sql ./artifacts/smoke.sql --output ./artifacts/smoke-bundle
+          if (!(Test-Path -LiteralPath ./artifacts/smoke-bundle/index.md -PathType Leaf)) {
+            throw 'The packaged tool did not create an OKF index.'
+          }

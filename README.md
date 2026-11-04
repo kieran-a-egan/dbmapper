@@ -4,9 +4,9 @@ An installable .NET command-line tool that exports SQL Server catalog metadata a
 
 ## Build and install
 
-Requires a .NET 8 or newer SDK/runtime. SQL Server 2016 or newer and Azure SQL Database are the intended catalog targets; the integration check uses SQL Server 2022.
+The CLI targets Windows x64, Linux x64, and macOS on Intel and Apple Silicon. Install a .NET SDK for your OS and architecture to build and install it. SQL Server 2016 or newer and Azure SQL Database are the intended catalog targets. The integration check uses SQL Server 2022.
 
-```powershell
+```sh
 dotnet restore DbMapper.slnx
 dotnet build DbMapper.slnx -c Release --no-restore
 dotnet run --project tests/DbMapper.SelfTest -c Release --no-build
@@ -15,6 +15,8 @@ dotnet tool install --global --add-source ./artifacts/packages DbMapper.Tool --v
 ```
 
 The `.slnx` build entry point requires a recent SDK (9.0.200+). With an older .NET 8 SDK, build/pack the individual `.csproj` files instead. The installed tool targets .NET 8 and permits major runtime roll-forward.
+
+On Linux and macOS, add `$HOME/.dotnet/tools` to your shell's `PATH` if it cannot find `dbmapper` after a global install. Use a physical output path when a parent is a symbolic link. For example, use `/private/tmp` for an output under macOS's `/tmp` alias.
 
 For a project-local tool, run `dotnet new tool-manifest` if needed, then replace `--global` with `--local` in the install command (use the absolute package directory if installing from another repository). Invoke the local tool with `dotnet tool run dbmapper -- ...`. This repository does not publish the package to NuGet.
 

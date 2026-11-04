@@ -14,7 +14,7 @@ These are **not** implicit authorizations. Affected implementation units must st
 
 **Why it matters:** Photino.Blazor's package declares .NET 10 as *computed compatible*, but full host-runtime/packaging behaviour and supported Linux WebView library versions are not proven. **Options:** validate existing Photino.Blazor; evaluate alternative host such as PhotinoX.Blazor *only with explicit approval*; revise framework choice. **Dependent:** U1/U7/U10. **Status:** open, release blocker.
 
-**Evidence (A04, disposable spike, `experiments/desktop-host/FINDINGS.md`):** Photino.Blazor 4.0.13 has no net10 group; a net10 spike consumes the net9 lib with no restore warning and launched a single native window on Windows 11 x64 (WebView2 Evergreen 154 present). Requires `[STAThread]`. User decision (recorded): WebView2 Evergreen accepted as a Windows prerequisite, and the net9-computed Photino.Blazor path accepted for the spike. Still open: WebView2 absence behaviour, directory picker and close/reopen not manually verified, Linux/macOS untested. Q1 stays open because of the untested items above (Linux/macOS, WebView2 absence, manual checks); the approval does not close it.
+**Historical evidence (A04, removed spike):** A net10 spike used Photino.Blazor 4.0.13's net9 library without a restore warning and launched a single native window on Windows 11 x64 with WebView2 Evergreen 154 and `[STAThread]`. The absence of WebView2, the directory picker, manual close/reopen and desktop runtime on Linux/macOS still need verification. See [ADR-002](../architecture/decisions/002-desktop-host.md) for spike-stage approvals.
 
 ## Q2 — Enforced network isolation
 
@@ -42,7 +42,7 @@ These are **not** implicit authorizations. Affected implementation units must st
 
 **Why:** Distributor/runtime support depends on distro-specific WebKitGTK and native packages. **Options:** choose specific supported stable releases compatible with chosen host, or narrow Linux matrix with explicit user agreement. **Dependent:** U1/U10/U11. **Status:** open; Ubuntu 22.04/24.04 are confirmed.
 
-**Evidence (A06):** untested. This machine has only stopped WSL distros (Ubuntu, docker-desktop); no Linux, macOS, Debian or Fedora smoke run performed.
+**Evidence (A06):** Desktop smoke testing remains outstanding on Linux and macOS.
 
 ## Q8 — Measurable large-catalog budgets
 

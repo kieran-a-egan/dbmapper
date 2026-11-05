@@ -10,7 +10,7 @@ tags: [architecture, decision, cli, dotnet]
 
 **Decision.** Extend `kieran-a-egan/dbmapper` as one repository. Extract existing catalog, secrets, SQL parser, renderer and protected writer code into `DbMapper.Core` targeting .NET 10. Keep `DbMapper.Cli` as the installable .NET tool and add `DbMapper.Desktop` as a second front end. The desktop UI calls shared core APIs directly, not a CLI process. Pi Software Factory remains a separate development tool.
 
-**Context.** The current `.NET 8` executable already separates major functions (`ProjectSecrets`, `ServerReader`, `CatalogReader`, `SqlFileUpdate`, `OkfBundle`, `BundleWriter`). The GUI adds discovery phases and per-object selection but must not change established CLI exports.
+**Context.** The original `.NET 8` executable already separated major functions (`ProjectSecrets`, `ServerReader`, `CatalogReader`, `SqlFileUpdate`, `OkfBundle`, `BundleWriter`). A07 retargeted that executable and its self-tests to .NET 10 without extracting the core. The GUI adds discovery phases and per-object selection but must not change established CLI exports.
 
 **Rationale.** Single ownership of security-sensitive SQL and file logic; one testable renderer and transactional writer; atomic refactoring and regression review; no cross-repository version skew.
 

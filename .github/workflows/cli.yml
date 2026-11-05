@@ -16,9 +16,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: |
-            8.0.x
-            10.0.x
+          dotnet-version: 10.0.x
       - run: dotnet build DbMapper.slnx -c Release
       - run: dotnet run --project tests/DbMapper.SelfTest -c Release --no-build
       - run: dotnet pack src/DbMapper -c Release --no-build -o artifacts/packages

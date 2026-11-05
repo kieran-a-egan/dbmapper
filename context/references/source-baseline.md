@@ -10,7 +10,7 @@ tags: [references, baseline, external]
 
 ## Existing repositories
 
-- [DbMapper](https://github.com/kieran-a-egan/dbmapper) (`main` inspected during planning). Existing implementation is a .NET 8 command-line tool; proposed .NET 10 library, CLI and desktop projects **do not yet exist** as verified source in this exercise.
+- [DbMapper](https://github.com/kieran-a-egan/dbmapper). The existing CLI (`src/DbMapper`) and self-tests target .NET 10 after A07. The package remains `DbMapper.Tool` 0.3.0 with command `dbmapper` and major runtime roll-forward. Shared-core extraction and separate CLI/desktop projects remain future work. SqlClient 6.1.8 replaces 6.1.7 because .NET 10's transitive dependency audit rejected its vulnerable cryptography dependency; the remaining direct dependency versions are unchanged.
 - [Pi Software Factory](https://github.com/kieran-a-egan/pi-software-factory) — local Pi extension used for controlled developer work; configuration documented as `.pi/software-factory.json`, with role stages, deterministic verification and optional parallel isolated workers. It is not a runtime dependency.
 
 ## DbMapper source landmarks

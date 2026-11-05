@@ -1,5 +1,10 @@
 # Knowledge change log
 
+## 2026-11-05
+
+- Completed A07: the existing CLI and self-tests now target .NET 10, and CI installs only the .NET 10 SDK. Package ID `DbMapper.Tool`, command `dbmapper`, version 0.3.0 and major runtime roll-forward are preserved. The installed tool now requires .NET 10 or a later major runtime allowed by that policy; older application projects remain supported for user-secrets discovery. Shared-core extraction and desktop feasibility remain separate work.
+- Updated SqlClient 6.1.7 to 6.1.8 because retargeting enabled transitive auditing that rejected its vulnerable `System.Security.Cryptography.Pkcs` 9.0.11 dependency. The patch resolves that dependency to 9.0.21 without audit suppression. Windows deterministic/golden, packaging, live SQL Server and junction checks passed; Linux/macOS upgrade verification remains pending. See delivery progress for exact evidence and the remaining A03 active-read cancellation gap.
+
 ## 2026-11-04
 
 - Removed the disposable desktop host experiment and added CLI build, self-test and installed-package smoke coverage for Windows x64, Linux x64 and Intel/Apple Silicon macOS. Desktop host feasibility remains governed by ADR-002.
